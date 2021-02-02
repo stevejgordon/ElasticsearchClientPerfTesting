@@ -39,7 +39,31 @@ namespace PerfTesting.Controllers
         {
             var sw = Stopwatch.StartNew();
 
-            var searchResponse = await _elasticClient.SearchAsync<Place>(s => s.Size(20));
+            var searchResponse = await _elasticClient.SearchAsync<Place>(s => s
+                .Query(qu => qu.Bool(boo => boo
+                    .Must(mu => mu.DisMax(di => di
+                        .TieBreaker(0)
+                        .Queries(que => que
+                            .QueryString(m => m
+                                .Query("phố đà").DefaultOperator(Operator.And)
+                                .Fields(fi => fi.Field("name_address").Field("address"))
+                                .Analyzer("standard_analyzer").Escape()), que => que
+                            .QueryString(m => m
+                                .Query("phố đà").DefaultOperator(Operator.And)
+                                .Fields(fi => fi.Field("name"))
+                                .Analyzer("standard_analyzer").Escape()))))
+                    .Should(mu => mu.DisMax(di => di.TieBreaker(0.1).Boost(4)
+                        .Queries(que => que
+                            .QueryString(m => m
+                                .Query("\"phố\"").DefaultOperator(Operator.And)
+                                .Fields(fi => fi.Field("name_address")
+                                    .Field("address")).PhraseSlop(10)
+                                .Analyzer("standard_analyzer").Boost(1).Escape()), que => que
+                            .QueryString(m => m
+                                .Query("\"phố\"").DefaultOperator(Operator.And)
+                                .Fields(fi => fi.Field("name")).PhraseSlop(10)
+                                .Analyzer("standard_analyzer").Boost(2).Escape()))))
+                    .Filter(f => f.Term(t => t.Field("is_deleted").Value(false))))).From(0).Size(20));
 
             sw.Stop();
 
@@ -101,36 +125,68 @@ namespace PerfTesting.Controllers
             return Ok();
         }
 
-        [HttpGet("seed")]
-        public async Task<IActionResult> Seed()
-        {
-            var place = new Place
-            {
-                Name = "A place",
-                Address1 = "1 Some Road",
-                Address2 = "Something",
-                Town = "Eastbourne",
-                County = "Sussex",
-                Postcode = "BN011AA"
-            };
+        //[HttpGet("seed")]
+        //public async Task<IActionResult> Seed()
+        //{
+        //    var place = new Place
+        //    {
+        //        Name = "A place",
+        //        Address1 = "1 Some Road",
+        //        Address2 = "Something",
+        //        Town = "Eastbourne",
+        //        County = "Sussex",
+        //        Postcode = "BN011AA"
+        //    };
             
-            for (var i = 0; i < 25; i++)
-            {
-                await _elasticClient.IndexAsync(place, d => d.Index("test"));
-            }
+        //    for (var i = 0; i < 25; i++)
+        //    {
+        //        await _elasticClient.IndexAsync(place, d => d.Index("test"));
+        //    }
             
-            return Ok();
-        }
+        //    return Ok();
+        //}
     }
 
     public class Place
     {
+        [Text(Name = "address")]
+        public string Address { get; set; }
+
+        [Text(Name = "end_date")]
+        public DateTime EndDate { get; set; }
+
+        [Text(Name = "is_deleted")]
+        public bool IsDeleted { get; set; }
+
+        [Text(Name = "name")]
         public string Name { get; set; }
-        public string Address1 { get; set; }
-        public string Address2 { get; set; }
-        public string Town { get; set; }
-        public string County { get; set; }
-        public string Postcode { get; set; }
+
+        [Text(Name = "name_address")]
+        public string NameAddress { get; set; }
+
+        [Text(Name = "object_id")]
+        public string ObjectId { get; set; }
+
+        [Text(Name = "start_date")]
+        public DateTime StartDate { get; set; }
+
+        [Text(Name = "types")]
+        public string[] Types { get; set; }
+
+        [Text(Name = "location")]
+        public double[] Location { get; set; }
+
+        [Text(Name = "geometry")]
+        public Geometry Geometry { get; set; }
+    }
+
+    public class Geometry
+    {
+        [Text(Name = "coordinates")]
+        public double[] Coordinates { get; set; }
+        
+        [Text(Name = "type")]
+        public string Type { get; set; }
     }
 
     public class SearchResponse
